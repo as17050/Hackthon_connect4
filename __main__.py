@@ -17,7 +17,10 @@ OPPONENT_PIECE = 2
 
 # Streamlit Page Configuration
 st.set_page_config(page_title='Connect 4 AI', page_icon='🔵')
-st.image("Festo.png", caption="", width=200)
+
+left_co, cent_co,last_co = st.columns(3)
+with last_co:
+    st.image("Festo.png", caption="", width=200)
 
 #def difficultyOnChange():
 #    st.session_state['game'].depth = difficulty_map[difficulty]
