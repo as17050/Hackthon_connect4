@@ -1,8 +1,5 @@
 from opcua import Client
 from opcua import ua
-import logging
-import time
-import random
 #logging.basicConfig(level=logging.DEBUG)
 Cpx_opc_ua_gvl_node_list={
     'MatchStarted'      :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.bMatchStarted",
@@ -12,7 +9,8 @@ Cpx_opc_ua_gvl_node_list={
     'BallDropColumn'   :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.iBallDropColumn",
     'BallDropDone'     :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.bBallDropDone",
     'StateMachine'      :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.StateMachine",
-    'PlayerSet'         :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.Player"
+    'PlayerSet'         :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.Player",
+    'test'              :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.iTestvariable_write"
 }
 
 #****************************************Connect the opc-ua client********************************************
@@ -41,4 +39,4 @@ class UA_Client():
 
 if __name__=="__main__":
     CPXClient=UA_Client(opc_ua_url)
-    CPXClient.readOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['MatchStarted'])
+    CPXClient.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['test'],value=10,variableType=ua.VariantType.Int16)
