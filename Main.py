@@ -67,6 +67,8 @@ st.write(f"Selected Difficulty: {difficulty}")
 def clearButtonClick():
     #write opc-ua variable
     CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['gameOver'],value=True,variableType=ua.VariantType.Boolean)
+    st.session_state['game'] = Connect4Game()
+
 
 #clear button
 st.button(label="Clear",on_click=clearButtonClick)
@@ -368,6 +370,14 @@ class Connect4Game:
             else:
                 st.info("It's a tie! 🤝")
 
+    def reinitialise(self):
+        self.board = np.zeros((ROW_COUNT, COLUMN_COUNT), dtype=int)
+        self.matchVsAi = True
+        self.depth = 1
+        self.game_over = False
+        self.winner: Optional[int] = None
+        self.turn = 0  # 0 = Player's turn, 1 = Opponent's turn
+
     @staticmethod
     def get_piece_html(piece: int) -> str:
         if piece == PLAYER_PIECE:
@@ -433,7 +443,7 @@ def readOpcUA():
         ErrorCode=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['iRow'])
         #print(ErrorCode)
         #StateMachine=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['StateMachine'])
-        time.sleep(0.5)
+        time.sleep(1)
 
 if __name__=="__main__":
     opcUaThread = threading.Thread(target=readOpcUA)
