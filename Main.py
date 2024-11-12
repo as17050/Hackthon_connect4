@@ -18,7 +18,7 @@ COLUMN_COUNT = 7
 WINDOW_LENGTH = 4
 EMPTY = 0
 PLAYER_PIECE = 1
-AI_PIECE = 2
+OPPONENT_PIECE = 2
 
 
 # Streamlit Page Configuration
@@ -30,10 +30,28 @@ def difficultyOnChange():
     st.session_state['game'].depth = difficulty_map[difficulty]
     print(f"Level (DEPTH): {st.session_state['game'].depth}")
 
+opponentChoice = st.radio(
+    "Who would you like to play against?",
+    ["AI", "Another player"],
+    captions=[
+        "Artificial opponent based on the minimax algorithm. Human against machine!",
+        "An opponent of flesh and blood",
+    ],
+)
 
+opponent_map = {
+    "AI": True,
+    "Another player": False,
+    "hard": 5
+}
+
+if 'game' in st.session_state.keys():
+    st.session_state['game'].matchVsAi = opponent_map[opponentChoice]
+    #st.write(f"Selected Opponent: {opponentChoice}")
 difficulty = st.select_slider(
     "Select a difficulty",
     options=["easy", "medium", "hard"],
+    disabled=opponentChoice == "Another player"
 )
 
 difficulty_map = {
@@ -41,6 +59,10 @@ difficulty_map = {
     "medium": 3,
     "hard": 5
 }
+
+if 'game' in st.session_state.keys():
+    st.session_state['game'].depth = difficulty_map[difficulty]
+st.write(f"Selected Difficulty: {difficulty}")
 
 def clearButtonClick():
     #write opc-ua variable
@@ -100,10 +122,11 @@ CPX_Opc_ua_client=UA_Client(url=opc_ua_url)
 class Connect4Game:
     def __init__(self):
         self.board = np.zeros((ROW_COUNT, COLUMN_COUNT), dtype=int)
+        self.matchVsAi = True
         self.depth = 1
         self.game_over = False
         self.winner: Optional[int] = None
-        self.turn = 0  # 0 = Player's turn, 1 = AI's turn
+        self.turn = 0  # 0 = Player's turn, 1 = Opponent's turn
 
     def drop_piece(self, row: int, col: int, piece: int):
         self.board[row][col] = piece
@@ -146,7 +169,7 @@ class Connect4Game:
 
     def evaluate_window(self, window: List[int], piece: int) -> int:
         score = 0
-        opp_piece = PLAYER_PIECE if piece == AI_PIECE else AI_PIECE
+        opp_piece = PLAYER_PIECE if piece == OPPONENT_PIECE else OPPONENT_PIECE
 
         if window.count(piece) == 4:
             score += 100
@@ -198,7 +221,7 @@ class Connect4Game:
 
     def is_terminal_node(self) -> bool:
         return (self.winning_move(PLAYER_PIECE) or
-                self.winning_move(AI_PIECE) or
+                self.winning_move(OPPONENT_PIECE) or
                 len(self.get_valid_locations()) == 0)
 
     def get_valid_locations(self) -> List[int]:
@@ -221,22 +244,22 @@ class Connect4Game:
         is_terminal = self.is_terminal_node()
         if depth == 0 or is_terminal:
             if is_terminal:
-                if self.winning_move(AI_PIECE):
+                if self.winning_move(OPPONENT_PIECE):
                     return (None, math.inf)
                 elif self.winning_move(PLAYER_PIECE):
                     return (None, -math.inf)
                 else:
                     return (None, 0)
             else:
-                return (None, self.score_position(AI_PIECE))
+                return (None, self.score_position(OPPONENT_PIECE))
 
         if maximizingPlayer:
             value = -math.inf
             best_col = random.choice(valid_locations)
-            ordered_locations = self.order_moves(valid_locations, AI_PIECE)
+            ordered_locations = self.order_moves(valid_locations, OPPONENT_PIECE)
             for col in ordered_locations:
                 row = self.get_next_open_row(col)
-                self.drop_piece(row, col, AI_PIECE)
+                self.drop_piece(row, col, OPPONENT_PIECE)
                 new_score = self.minimax(depth - 1, alpha, beta, False)[1]
                 self.board[row][col] = EMPTY  # Undo move
                 if new_score > value:
@@ -274,7 +297,20 @@ class Connect4Game:
                 if len(self.get_valid_locations()) == 0:
                     self.game_over = True
                 else:
-                    self.turn = 1  # Switch to AI's turn
+                    self.turn = 1  # Switch to Opponents's turn
+            st.session_state['game'] = self  # Update the game state
+            st.rerun()
+        if self.is_valid_location(col) and not self.game_over and self.turn == 1:
+            row = self.get_next_open_row(col)
+            self.drop_piece(row, col, OPPONENT_PIECE)
+            if self.winning_move(OPPONENT_PIECE):
+                self.game_over = True
+                self.winner = OPPONENT_PIECE
+            else:
+                if len(self.get_valid_locations()) == 0:
+                    self.game_over = True
+                else:
+                    self.turn = 0  # Switch back to player's turn
             st.session_state['game'] = self  # Update the game state
             st.rerun()
 
@@ -284,10 +320,10 @@ class Connect4Game:
             CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['test'], value=col + 1,variableType=ua.VariantType.Int16)
             if col is not None and self.is_valid_location(col):
                 row = self.get_next_open_row(col)
-                self.drop_piece(row, col, AI_PIECE)
-                if self.winning_move(AI_PIECE):
+                self.drop_piece(row, col, OPPONENT_PIECE)
+                if self.winning_move(OPPONENT_PIECE):
                     self.game_over = True
-                    self.winner = AI_PIECE
+                    self.winner = OPPONENT_PIECE
                 else:
                     if len(self.get_valid_locations()) == 0:
                         self.game_over = True
@@ -304,7 +340,7 @@ class Connect4Game:
         cols = st.columns(COLUMN_COUNT)
         piece_emoji = '⬇️' if self.turn == 0 else '▽'  # Blue for player, Yellow for AI
         for col in range(COLUMN_COUNT):
-            disabled = not self.is_valid_location(col) or self.game_over or self.turn != 0
+            disabled = not self.is_valid_location(col) or self.game_over or (self.matchVsAi and self.turn != 0)
             if cols[col].button(piece_emoji, key=f'drop_{col}', use_container_width=True, disabled=disabled):
                 #write the column position
                 print(col)
@@ -320,9 +356,15 @@ class Connect4Game:
 
         if self.game_over:
             if self.winner == PLAYER_PIECE:
-                st.success("Congratulations! You won the game! 🎉")
-            elif self.winner == AI_PIECE:
-                st.error("Game Over. The AI won the game. 🤖")
+                if self.matchVsAi:
+                    st.success("Congratulations! You won the game! 🎉")
+                else:
+                    st.success("Player 1 won the game! 🎉")
+            elif self.winner == OPPONENT_PIECE:
+                if self.matchVsAi:
+                    st.error("Game Over. The AI won the game. 🤖")
+                else:
+                    st.success("Player 2 won the game! 🎉")
             else:
                 st.info("It's a tie! 🤝")
 
@@ -330,7 +372,7 @@ class Connect4Game:
     def get_piece_html(piece: int) -> str:
         if piece == PLAYER_PIECE:
             emoji = '🔵'
-        elif piece == AI_PIECE:
+        elif piece == OPPONENT_PIECE:
             emoji = '⚫'
         else:
             emoji = '⚪️'
@@ -376,7 +418,7 @@ def main():
 
     # If it's AI's turn, make the AI move
     print('test')
-    if game.turn == 1 and not game.game_over:
+    if game.matchVsAi and game.turn == 1 and not game.game_over:
         print("ai_move")
         game.ai_move()
 
@@ -389,9 +431,9 @@ def readOpcUA():
         #balldropDone=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['bGameOver'])
 
         ErrorCode=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['iRow'])
-        print(ErrorCode)
+        #print(ErrorCode)
         #StateMachine=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['StateMachine'])
-        time.sleep(0.1)
+        time.sleep(0.5)
 
 if __name__=="__main__":
     opcUaThread = threading.Thread(target=readOpcUA)
