@@ -28,7 +28,6 @@ left_co, cent_co,last_co = st.columns(3)
 with last_co:
     st.image("Festo.png", caption="", width=200)
 
-
 # Initialize session state for the error if it doesn't exist
 if 'error' not in st.session_state:
     st.session_state.error=False
@@ -54,48 +53,58 @@ def difficultyOnChange():
     st.session_state['game'].depth = difficulty_map[difficulty]
     print(f"Level (DEPTH): {st.session_state['game'].depth}")
 
-opponentChoice = st.radio(
-    "Who would you like to play against?",
-    ["AI", "Another player"],
-    captions=[
-        "Artificial opponent based on the minimax algorithm. Human against machine!",
-        "An opponent of flesh and blood",
-    ],
-)
+left_co, right_co = st.columns(2)
+with left_co:
+    opponentChoice = st.radio(
+        "Who would you like to play against?",
+        ["AI 🤖", "Another player 🤺"],
+        captions=[
+            "",
+            "",
+        ], horizontal=True
+    )
 
-opponent_map = {
-    "AI": True,
-    "Another player": False,
-    "hard": 5
-}
+    opponent_map = {
+        "AI 🤖": True,
+        "Another player 🤺": False,
+        "hard": 5
+    }
 
-if 'game' in st.session_state.keys():
-    st.session_state['game'].matchVsAi = opponent_map[opponentChoice]
-    #st.write(f"Selected Opponent: {opponentChoice}")
-difficulty = st.select_slider(
-    "Select a difficulty",
-    options=["easy", "medium", "hard"],
-    disabled=opponentChoice == "Another player"
-)
+    if 'game' in st.session_state.keys():
+        st.session_state['game'].matchVsAi = opponent_map[opponentChoice]
+        # st.write(f"Selected Opponent: {opponentChoice}")
 
-difficulty_map = {
-    "easy": 1,
-    "medium": 3,
-    "hard": 5
-}
+with right_co:
+    difficulty = st.select_slider(
+        "Select a difficulty",
+        options=["easy", "medium", "hard"],
+        disabled=opponentChoice == "Another player 🤺"
+    )
 
-if 'game' in st.session_state.keys():
-    st.session_state['game'].depth = difficulty_map[difficulty]
-st.write(f"Selected Difficulty: {difficulty}")
+    difficulty_map = {
+        "easy": 1,
+        "medium": 3,
+        "hard": 5
+    }
+
+    if 'game' in st.session_state.keys():
+        st.session_state['game'].depth = difficulty_map[difficulty]
 
 def clearButtonClick():
     #write opc-ua variable
-    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['EmptyBoard'], value=True,variableType=ua.VariantType.Boolean)
-    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=0,variableType=ua.VariantType.Int16)
-    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['PlayerSet'], value=0,variableType=ua.VariantType.Int16)
-    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['bMatchFinished'], value=0,variableType=ua.VariantType.Boolean)
-    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['MatchStarted'], value=1, variableType=ua.VariantType.Boolean)
+
     st.session_state['game'] = Connect4Game()
+
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['EmptyBoard'], value=True,
+                                            variableType=ua.VariantType.Boolean)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=0,
+                                            variableType=ua.VariantType.Int16)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['PlayerSet'], value=0,
+                                            variableType=ua.VariantType.Int16)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['bMatchFinished'], value=0,
+                                            variableType=ua.VariantType.Boolean)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['MatchStarted'], value=1,
+                                            variableType=ua.VariantType.Boolean)
     print("cleared")
 
 #clear button
@@ -127,14 +136,16 @@ Cpx_opc_ua_gvl_node_list={
 
 #****************************************Connect the opc-ua client********************************************
 opc_ua_url = "opc.tcp://192.168.0.10:4840"
-print("OPC UA is running")
+
 
 class UA_Client():
     def __init__(self,url):
         self.url=url
+        #self.connected=False
         try:
             self.client=Client(self.url)
             self.client.connect()
+            #self.connected=True
             print("OPC-UA connection successful")
         except Exception as e:
             print(f"OPC-UA connection not established {e}")
@@ -147,6 +158,11 @@ class UA_Client():
         refNode=self.client.get_node(nodeID)
         return refNode.set_value(value=value,varianttype=variableType)
         #confirm if the value is written
+
+    def disconnect(self):
+        self.client.disconnect()
+        #self.connected = False
+
 
 CPX_Opc_ua_client=UA_Client(url=opc_ua_url)
 
@@ -337,6 +353,23 @@ class Connect4Game:
                     self.game_over = True
                 else:
                     balldropDone = False
+                    #st.markdown(
+                    #    """
+                    #    <style>
+                    #        .stButton{
+                    #            display: none;
+                    #        }
+                    #        .stSpinner{
+                    #            display: block;
+                    #        }
+                    #    </style>
+                    #    """,
+                    #    unsafe_allow_html=True
+                    #)
+                    #with st.spinner('Waiting'):
+                    #    time.sleep(3)
+
+                    #with st.spinner('Waiting'):
                     while not balldropDone:
                         time.sleep(0.50)
 
@@ -381,8 +414,11 @@ class Connect4Game:
                 row = self.get_next_open_row(col)
                 self.drop_piece(row, col, OPPONENT_PIECE)
                 CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['PlayerSet'], value=1,variableType=ua.VariantType.Int16)
+
                 #BallDropColumn
                 CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=col + 1,variableType=ua.VariantType.Int16)
+                print(col)
+                time.sleep(0.5)
                 if self.winning_move(OPPONENT_PIECE):
                     self.game_over = True
                     self.winner = OPPONENT_PIECE
@@ -411,8 +447,7 @@ class Connect4Game:
         for col in range(COLUMN_COUNT):
             disabled = not self.is_valid_location(col) or self.game_over or (self.matchVsAi and self.turn != 0)
             if cols[col].button(piece_emoji, key=f'drop_{col}', use_container_width=True, disabled=disabled):
-                #write the column position
-                print(col)
+
                 #CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['test'],value=col+1,variableType=ua.VariantType.Int16)
                 self.handle_click(col)
 
@@ -426,6 +461,7 @@ class Connect4Game:
         if self.game_over:
             CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['bMatchFinished'], value=1,variableType=ua.VariantType.Boolean)
             CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['MatchStarted'], value=0,variableType=ua.VariantType.Boolean)
+            CPX_Opc_ua_client.disconnect()
 
             if self.winner == PLAYER_PIECE:
                 if self.matchVsAi:
@@ -446,9 +482,9 @@ class Connect4Game:
         if piece == PLAYER_PIECE:
             emoji = '🔵'
         elif piece == OPPONENT_PIECE:
-            emoji = '⚫'
-        else:
             emoji = '⚪️'
+        else:
+            emoji = '⚫'
         return f"<div style='text-align: center; font-size: 50px;'>{emoji}</div>"
 
 
@@ -479,6 +515,9 @@ def main():
             border: 2px solid #333; /* Bordure autour du bouton */
             cursor: pointer; /* Le curseur devient un pointeur */
         }
+        .stMainBlockContainer{
+            padding-top: 1em !important;
+        }
         </style>
         """,
         unsafe_allow_html=True
@@ -498,18 +537,17 @@ def main():
     game: Connect4Game = st.session_state['game']
 
     # If it's AI's turn, make the AI move
-    print('test')
-    if game.matchVsAi and game.turn == 1 and not game.game_over:
-        print("ai_move")
-        game.ai_move()
+
+    #game.draw_board()
 
     game.draw_board()
-
-
+    if game.matchVsAi and game.turn == 1 and not game.game_over:
+        game.ai_move()
 
 
 if __name__=="__main__":
     main()
+
 
 
 
