@@ -6,6 +6,7 @@ from typing import List, Tuple, Optional
 from PIL import Image
 import time
 import threading
+from streamlit.runtime.scriptrunner import add_script_run_ctx, get_script_run_ctx
 
 #Opc-UA variable
 balldropDone=False
@@ -23,7 +24,30 @@ OPPONENT_PIECE = 2
 
 # Streamlit Page Configuration
 st.set_page_config(page_title='Connect 4 AI', page_icon='🔵')
-st.image("Festo.png", caption="", width=200)
+left_co, cent_co,last_co = st.columns(3)
+with last_co:
+    st.image("Festo.png", caption="", width=200)
+
+
+# Initialize session state for the error if it doesn't exist
+if 'error' not in st.session_state:
+    st.session_state.error=False
+# Function to update the error
+def readOpcUA():
+    while True:
+        #st.session_state.error=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['Error'])
+        time.sleep(1)
+
+if 'thread' not in st.session_state:
+    # Get the current script run context
+    ctx = get_script_run_ctx()
+    # Create the thread
+    thread = threading.Thread(target=readOpcUA, daemon=True)
+    # Add the script run context to the thread
+    add_script_run_ctx(thread, ctx)
+    # Start the thread
+    thread.start()
+    st.session_state.thread = thread
 
 
 def difficultyOnChange():
@@ -66,9 +90,13 @@ st.write(f"Selected Difficulty: {difficulty}")
 
 def clearButtonClick():
     #write opc-ua variable
-    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['gameOver'],value=True,variableType=ua.VariantType.Boolean)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['EmptyBoard'], value=True,variableType=ua.VariantType.Boolean)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=0,variableType=ua.VariantType.Int16)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['PlayerSet'], value=0,variableType=ua.VariantType.Int16)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['bMatchFinished'], value=0,variableType=ua.VariantType.Boolean)
+    CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['MatchStarted'], value=1, variableType=ua.VariantType.Boolean)
     st.session_state['game'] = Connect4Game()
-
+    print("cleared")
 
 #clear button
 st.button(label="Clear",on_click=clearButtonClick)
@@ -86,6 +114,7 @@ Cpx_opc_ua_gvl_node_list={
     'MatchStarted'      :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.bMatchStarted",
     'bMatchFinished'    :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.bMatchFinished",
     'ErrorCode'        :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.iErrorCode",
+    'Error'             :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.bError",
     'EmptyBoard'       :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.bEmptyBoard",
     'BallDropColumn'   :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.iBallDropColumn",
     'BallDropDone'     :"ns=4;s=|var|CPX-E-CEC-C1-PN.Application.GVL_OPC_UA.bBallDropDone",
@@ -129,6 +158,9 @@ class Connect4Game:
         self.game_over = False
         self.winner: Optional[int] = None
         self.turn = 0  # 0 = Player's turn, 1 = Opponent's turn
+        self.ballDropDone = False
+
+
 
     def drop_piece(self, row: int, col: int, piece: int):
         self.board[row][col] = piece
@@ -292,19 +324,36 @@ class Connect4Game:
         if self.is_valid_location(col) and not self.game_over and self.turn == 0:
             row = self.get_next_open_row(col)
             self.drop_piece(row, col, PLAYER_PIECE)
+            CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['PlayerSet'], value=0,variableType=ua.VariantType.Int16)
+            #'BallDropColumn'
+            CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=col + 1,variableType=ua.VariantType.Int16)
+            print("column set")
             if self.winning_move(PLAYER_PIECE):
+
                 self.game_over = True
                 self.winner = PLAYER_PIECE
             else:
                 if len(self.get_valid_locations()) == 0:
                     self.game_over = True
                 else:
-                    self.turn = 1  # Switch to Opponents's turn
+                    balldropDone = False
+                    while not balldropDone:
+                        time.sleep(0.50)
+
+                        balldropDone = CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['BallDropDone'])
+                        print("waiting")
+                    if balldropDone:
+                        CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['PlayerSet'], value=1,variableType=ua.VariantType.Int16)
+                        CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=0,variableType=ua.VariantType.Int16)
+                        self.turn = 1  # Switch to Opponents's turn
             st.session_state['game'] = self  # Update the game state
             st.rerun()
         if self.is_valid_location(col) and not self.game_over and self.turn == 1:
             row = self.get_next_open_row(col)
             self.drop_piece(row, col, OPPONENT_PIECE)
+            CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['PlayerSet'], value=1,variableType=ua.VariantType.Int16)
+            #BallDropColumn
+            CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=col + 1,variableType=ua.VariantType.Int16)
             if self.winning_move(OPPONENT_PIECE):
                 self.game_over = True
                 self.winner = OPPONENT_PIECE
@@ -312,17 +361,28 @@ class Connect4Game:
                 if len(self.get_valid_locations()) == 0:
                     self.game_over = True
                 else:
-                    self.turn = 0  # Switch back to player's turn
+                    balldropDone = False
+                    while not balldropDone:
+                        time.sleep(0.50)
+                        balldropDone = CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['BallDropDone'])
+                    if balldropDone:
+                        self.turn = 0  # Switch back to player's turn
+                        CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['PlayerSet'], value=0,variableType=ua.VariantType.Int16)
+                        CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=0,variableType=ua.VariantType.Int16)
+
             st.session_state['game'] = self  # Update the game state
             st.rerun()
 
     def ai_move(self):
         if not self.game_over and self.turn == 1:
             col, _ = self.minimax(self.depth, -math.inf, math.inf, True)
-            CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['test'], value=col + 1,variableType=ua.VariantType.Int16)
+
             if col is not None and self.is_valid_location(col):
                 row = self.get_next_open_row(col)
                 self.drop_piece(row, col, OPPONENT_PIECE)
+                CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['PlayerSet'], value=1,variableType=ua.VariantType.Int16)
+                #BallDropColumn
+                CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=col + 1,variableType=ua.VariantType.Int16)
                 if self.winning_move(OPPONENT_PIECE):
                     self.game_over = True
                     self.winner = OPPONENT_PIECE
@@ -330,7 +390,14 @@ class Connect4Game:
                     if len(self.get_valid_locations()) == 0:
                         self.game_over = True
                     else:
-                        self.turn = 0  # Switch back to player's turn
+                        ballDropDone=False
+                        while not ballDropDone:
+                            time.sleep(0.50)
+                            ballDropDone=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['BallDropDone'])
+                        if ballDropDone:
+                            CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['PlayerSet'], value=0,variableType=ua.VariantType.Int16)
+                            CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=0,variableType=ua.VariantType.Int16)
+                            self.turn = 0  # Switch back to player's turn
             st.session_state['game'] = self  # Update the game state
             st.rerun()
 
@@ -346,7 +413,7 @@ class Connect4Game:
             if cols[col].button(piece_emoji, key=f'drop_{col}', use_container_width=True, disabled=disabled):
                 #write the column position
                 print(col)
-                CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['test'],value=col+1,variableType=ua.VariantType.Int16)
+                #CPX_Opc_ua_client.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['test'],value=col+1,variableType=ua.VariantType.Int16)
                 self.handle_click(col)
 
         # Draw the board with emojis representing each cell
@@ -357,6 +424,9 @@ class Connect4Game:
                 cols[col].markdown(self.get_piece_html(piece), unsafe_allow_html=True)
 
         if self.game_over:
+            CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['bMatchFinished'], value=1,variableType=ua.VariantType.Boolean)
+            CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['MatchStarted'], value=0,variableType=ua.VariantType.Boolean)
+
             if self.winner == PLAYER_PIECE:
                 if self.matchVsAi:
                     st.success("Congratulations! You won the game! 🎉")
@@ -370,13 +440,6 @@ class Connect4Game:
             else:
                 st.info("It's a tie! 🤝")
 
-    def reinitialise(self):
-        self.board = np.zeros((ROW_COUNT, COLUMN_COUNT), dtype=int)
-        self.matchVsAi = True
-        self.depth = 1
-        self.game_over = False
-        self.winner: Optional[int] = None
-        self.turn = 0  # 0 = Player's turn, 1 = Opponent's turn
 
     @staticmethod
     def get_piece_html(piece: int) -> str:
@@ -423,6 +486,14 @@ def main():
 
     if 'game' not in st.session_state:
         st.session_state['game'] = Connect4Game()
+        CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['EmptyBoard'], value=True,variableType=ua.VariantType.Boolean)
+        CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['BallDropColumn'], value=0,variableType=ua.VariantType.Int16)
+        CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['PlayerSet'], value=0,variableType=ua.VariantType.Int16)
+        CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['bMatchFinished'], value=0,variableType=ua.VariantType.Boolean)
+        CPX_Opc_ua_client.writeOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['MatchStarted'], value=1,variableType=ua.VariantType.Boolean)
+
+    #if st.session_state["game"].ballDropDone:
+
 
     game: Connect4Game = st.session_state['game']
 
@@ -435,19 +506,9 @@ def main():
     game.draw_board()
 
 
-def readOpcUA():
-    while True:
-        ##real all the opc-ua variables BallDropDone
-        #balldropDone=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['bGameOver'])
 
-        ErrorCode=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['iRow'])
-        #print(ErrorCode)
-        #StateMachine=CPX_Opc_ua_client.readOPC_UA_NodeValue(nodeID=Cpx_opc_ua_gvl_node_list['StateMachine'])
-        time.sleep(1)
 
 if __name__=="__main__":
-    opcUaThread = threading.Thread(target=readOpcUA)
-    opcUaThread.start()
     main()
 
 

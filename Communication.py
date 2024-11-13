@@ -41,3 +41,4 @@ if __name__=="__main__":
     CPXClient=UA_Client(opc_ua_url)
     CPXClient.writeOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['test'],value=10,variableType=ua.VariantType.Int16)
     print(CPXClient.readOPC_UA_NodeValue(Cpx_opc_ua_gvl_node_list['test']))
+    CPXClient.client.disconnect()
